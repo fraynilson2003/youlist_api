@@ -8,7 +8,7 @@ import { unlink } from 'fs';
 export class YoutubeController {
   constructor(private yotubeService: YoutubeService) {}
 
-  @Get('download-audio')
+  @Get('download-list-youtube')
   async downloadAudio(
     @Query('list_id') idPlayList: string,
     @Res() response: Response,
@@ -31,5 +31,12 @@ export class YoutubeController {
         });
       }
     });
+  }
+
+  @Get('prueba-audio')
+  async pruebaAudio(@Query('list_id') playlistId: string) {
+    const result = await this.yotubeService.createFolderPlaylist(playlistId);
+
+    return result;
   }
 }

@@ -69,10 +69,10 @@ export class YoutubeService {
 
     for (const song of playlist.items as PlaylistVideo[]) {
       try {
-        const stream = await yt.download(song.id as string, {
+        const stream = await yt.download(String(song.id), {
           type: 'audio', // audio, video or video+audio
           quality: 'best', // best, bestefficiency, 144p, 240p, 480p, 720p and so on.
-          //client: 'YTMUSIC',
+          client: 'WEB',
           format: 'mp4',
         });
 
@@ -85,6 +85,8 @@ export class YoutubeService {
           try {
             file.write(chunk);
           } catch (error) {
+            console.log('-----error chunk---');
+
             return;
           }
         }
@@ -94,10 +96,9 @@ export class YoutubeService {
           console.log('---------- Archivo creado correctamente:', song.title);
         });
       } catch (error) {
-        console.log('//////////////Fallo creando', song.title);
-        console.log(error);
-
-        continue;
+        if (error instanceof Utils.InnertubeError) {
+          console.log('//////////////Fallo descargando', song.title);
+        }
       }
     }
 

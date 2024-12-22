@@ -72,8 +72,7 @@ export class YoutubeService {
         const stream = await yt.download(String(song.id), {
           type: 'audio', // audio, video or video+audio
           quality: 'best', // best, bestefficiency, 144p, 240p, 480p, 720p and so on.
-          client: 'WEB',
-          format: 'mp4',
+          client: 'YTMUSIC',
         });
 
         const filePath = `${dirFolder}/${this.sanitizeName(song.title).replace(/\//g, '')}.m4a`;

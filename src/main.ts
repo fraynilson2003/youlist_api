@@ -1,13 +1,12 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { AllExceptionsFilter } from './filters/all-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({
-    origin: '*',
+    origin: ['http://localhost:3000'],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   });
 
@@ -25,9 +24,7 @@ async function bootstrap() {
     },
   });
 
-  //app.use(morgan('dev'));
-  app.useGlobalFilters(new AllExceptionsFilter());
-  await app.listen(3000);
-  console.log('********** Server Running 3000 **********');
+  await app.listen(3005);
+  console.log('********** Server Running 3005 **********');
 }
 bootstrap();

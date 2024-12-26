@@ -53,6 +53,7 @@ export class YoutubeController {
     const { dirFile, filename } =
       await this.yotubeService.proccessCreateRarPlaylistByUrl(url);
 
+    response.set('Access-Control-Expose-Headers', 'Content-Disposition');
     response.download(dirFile, filename, (err) => {
       if (err) {
         console.error('Error al enviar archivo:', err);

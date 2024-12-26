@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { createWriteStream, existsSync, mkdirSync } from 'fs';
 import { Innertube, UniversalCache, Utils } from 'youtubei.js';
 import { PlaylistVideo } from 'youtubei.js/dist/src/parser/nodes';
@@ -49,11 +49,8 @@ export class YoutubeService {
     const urlParams = new URLSearchParams(url);
     const playlistId = urlParams.get('list');
 
-    console.log('---------playlistId');
-    console.log(playlistId);
-
     if (!playlistId) {
-      throw new Error('Falta el parámetro "list_id"');
+      throw new Error('Falta el parámetro "list"');
     }
 
     const folder = await this.createFolderPlaylist(playlistId);
@@ -70,63 +67,70 @@ export class YoutubeService {
   }
 
   async createFolderPlaylist(playlistId: string): Promise<IResponseFolder> {
-    const yt = await Innertube.create({
-      cache: new UniversalCache(false),
-      generate_session_locally: true,
-    });
+    try {
+      const yt = await Innertube.create({
+        cache: new UniversalCache(false),
+        generate_session_locally: true,
+      });
 
-    const playlist = await yt.getPlaylist(playlistId);
-    const uniqueUuid = randomUUID();
-    const folderName = `${this.sanitizeName(playlist.info.title)} - ${uniqueUuid}`;
-    const dirFolder = join(this.downloadDir, folderName);
+      const playlist = await yt.getPlaylist(playlistId);
 
-    if (!existsSync(dirFolder)) {
-      mkdirSync(dirFolder);
-    }
+      const uniqueUuid = randomUUID();
+      const folderName = `${this.sanitizeName(playlist.info.title)} - ${uniqueUuid}`;
+      const dirFolder = join(this.downloadDir, folderName);
 
-    let counter = 1;
-    for (const song of playlist.items as PlaylistVideo[]) {
-      try {
-        await new Promise<void>(async (resolve, reject) => {
-          try {
-            const stream = await yt.download(String(song.id), {
-              type: 'video+audio', // audio, video or video+audio
-              quality: 'best', // best, bestefficiency, 144p, 240p, 480p, 720p and so on.
-              client: 'YTMUSIC',
-            });
-
-            const filePath = `${dirFolder}/${counter} {${this.sanitizeName(song.title.text).replace(/\//g, '')}.m4a`;
-            counter++;
-            const file = createWriteStream(filePath);
-
-            // Escribe los datos en el archivo
-            for await (const chunk of Utils.streamToIterable(stream)) {
-              file.write(chunk);
-            }
-            // Asegúrate de cerrar el archivo una vez que todo esté escrito
-            file.end(() => {
-              console.log(
-                '---------- Archivo creado correctamente:',
-                song.title.text,
-              );
-              resolve();
-            });
-          } catch (error) {
-            reject(error);
-          }
-        });
-      } catch (error) {
-        if (error instanceof Utils.InnertubeError) {
-          console.log('//////////////Fallo descargando', song.title.text);
-        }
-        continue;
+      if (!existsSync(dirFolder)) {
+        mkdirSync(dirFolder);
       }
-    }
 
-    return {
-      dirFile: dirFolder,
-      filename: folderName,
-    };
+      let counter = 1;
+      for (const song of playlist.items as PlaylistVideo[]) {
+        try {
+          await new Promise<void>(async (resolve, reject) => {
+            try {
+              const stream = await yt.download(String(song.id), {
+                type: 'video+audio', // audio, video or video+audio
+                quality: 'best', // best, bestefficiency, 144p, 240p, 480p, 720p and so on.
+                client: 'YTMUSIC',
+              });
+
+              const filePath = `${dirFolder}/${counter} {${this.sanitizeName(song.title.text).replace(/\//g, '')}.m4a`;
+              counter++;
+              const file = createWriteStream(filePath);
+
+              // Escribe los datos en el archivo
+              for await (const chunk of Utils.streamToIterable(stream)) {
+                file.write(chunk);
+              }
+              // Asegúrate de cerrar el archivo una vez que todo esté escrito
+              file.end(() => {
+                console.log(
+                  '---------- Archivo creado correctamente:',
+                  song.title.text,
+                );
+                resolve();
+              });
+            } catch (error) {
+              reject(error);
+            }
+          });
+        } catch (error) {
+          if (error instanceof Utils.InnertubeError) {
+            console.log('//////////////Fallo descargando', song.title.text);
+          }
+          continue;
+        }
+      }
+
+      return {
+        dirFile: dirFolder,
+        filename: folderName,
+      };
+    } catch (error) {
+      throw new NotFoundException(
+        'La lista de reproucción no se puede descargar, asegurate de copiar un link que contenga la lista de reproducción',
+      );
+    }
   }
 
   async createRar(

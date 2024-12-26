@@ -1,12 +1,20 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as dotenv from 'dotenv';
 
 async function bootstrap() {
+  dotenv.config();
+
   const app = await NestFactory.create(AppModule);
 
+  const WEB_CLIENT_URL = process.env.WEB_CLIENT_URL;
+
+  console.log('**************WEB_CLIENT_URL******************');
+  console.log(WEB_CLIENT_URL);
+
   app.enableCors({
-    origin: ['http://localhost:3000'],
+    origin: ['http://localhost:3000', WEB_CLIENT_URL],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   });
 

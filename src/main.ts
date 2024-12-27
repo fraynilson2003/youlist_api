@@ -9,6 +9,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const WEB_CLIENT_URL = process.env.WEB_CLIENT_URL;
+  const PORT = Number(process.env.PORT || 3000);
 
   console.log('**************WEB_CLIENT_URL******************');
   console.log(WEB_CLIENT_URL);
@@ -32,7 +33,7 @@ async function bootstrap() {
     },
   });
 
-  await app.listen(3005);
-  console.log('********** Server Running 3005 **********');
+  await app.listen(PORT);
+  console.log(`********** Server Running ${PORT} **********`);
 }
 bootstrap();

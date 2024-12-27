@@ -13,6 +13,7 @@ async function bootstrap() {
   app.enableCors({
     origin: ['http://localhost:3000', 'https://youlist-web.vercel.app'],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    exposedHeaders: 'Content-Disposition',
   });
 
   console.log('*************  WEB_CLIENT_URL  ************');

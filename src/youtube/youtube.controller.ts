@@ -53,7 +53,6 @@ export class YoutubeController {
     const { dirFile, filename } =
       await this.yotubeService.proccessCreateRarPlaylistByUrl(url);
 
-    response.set('Access-Control-Expose-Headers', 'Content-Disposition');
     response.download(dirFile, filename, (err) => {
       if (err) {
         console.error('Error al enviar archivo:', err);
@@ -69,17 +68,5 @@ export class YoutubeController {
         });
       }
     });
-  }
-
-  @Get('prueba')
-  @ApiQuery({
-    name: 'list_id',
-    type: String,
-    example: 'PLFNUImapc0zJcOWstLHHBDRvmAewDqzD5',
-  })
-  async pruebaAudio(@Query('list_id') playlistId: string) {
-    const result = await this.yotubeService.createFolderPlaylist(playlistId);
-
-    return result;
   }
 }

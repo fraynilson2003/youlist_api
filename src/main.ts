@@ -15,7 +15,7 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   });
 
-  console.log('************* WEB_CLIENT_URL ************');
+  console.log('*************  WEB_CLIENT_URL  ************');
   console.log(WEB_CLIENT);
 
   const config = new DocumentBuilder()

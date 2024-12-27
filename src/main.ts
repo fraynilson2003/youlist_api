@@ -1,12 +1,17 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as dotenv from 'dotenv';
 
 async function bootstrap() {
+  dotenv.config();
+
   const app = await NestFactory.create(AppModule);
+  const WEB_CLIENT = process.env.WEB_CLIENT_URL;
+  const PORT = Number(process.env.PORT || 3005);
 
   app.enableCors({
-    origin: ['http://localhost:3000'],
+    origin: ['http://localhost:3000', WEB_CLIENT],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   });
 
@@ -24,7 +29,7 @@ async function bootstrap() {
     },
   });
 
-  await app.listen(3005);
-  console.log(`********** Server Running ${3005} **********`);
+  await app.listen(PORT);
+  console.log(`********** Server Running ${PORT} **********`);
 }
 bootstrap();

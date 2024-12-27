@@ -10,7 +10,8 @@ async function bootstrap() {
   const PORT = Number(process.env.PORT || 3005);
 
   app.enableCors({
-    origin: ['*'],
+    // origin: ['https://youlist-web.vercel.app', 'http://localhost:3000'],
+    origin: '*',
     methods: '*',
     exposedHeaders: 'Content-Disposition',
   });

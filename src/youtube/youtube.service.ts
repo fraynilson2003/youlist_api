@@ -71,6 +71,7 @@ export class YoutubeService {
       const yt = await Innertube.create({
         cache: new UniversalCache(false),
         generate_session_locally: true,
+        location: 'PE',
       });
 
       const playlist = await yt.getPlaylist(playlistId);

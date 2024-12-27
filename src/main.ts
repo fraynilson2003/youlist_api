@@ -7,7 +7,6 @@ async function bootstrap() {
   dotenv.config();
 
   const app = await NestFactory.create(AppModule);
-  const WEB_CLIENT = process.env.WEB_CLIENT_URL;
   const PORT = Number(process.env.PORT || 3005);
 
   app.enableCors({
@@ -15,9 +14,6 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     exposedHeaders: 'Content-Disposition',
   });
-
-  console.log('*************  WEB_CLIENT_URL  ************');
-  console.log(WEB_CLIENT);
 
   const config = new DocumentBuilder()
     .setTitle('Descarga lista de youtube en mp3')

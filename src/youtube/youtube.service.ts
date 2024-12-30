@@ -9,7 +9,6 @@ import { promisify } from 'util';
 import { IResponseFolder } from './interfaces/responseRarFolder';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
-import { log } from 'console';
 
 const execPromise = promisify(exec);
 
@@ -135,7 +134,6 @@ export class YoutubeService {
       };
     } catch (error) {
       console.log('****************error*******************');
-      log;
 
       throw new NotFoundException(
         'La lista de reproucción no se puede descargar, asegurate de copiar un link que contenga la lista de reproducción',

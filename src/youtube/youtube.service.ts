@@ -134,6 +134,7 @@ export class YoutubeService {
       };
     } catch (error) {
       console.log('****************error*******************');
+      console.log(error);
 
       throw new NotFoundException(
         'La lista de reproucción no se puede descargar, asegurate de copiar un link que contenga la lista de reproducción',

@@ -9,6 +9,7 @@ import { promisify } from 'util';
 import { IResponseFolder } from './interfaces/responseRarFolder';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
+import { log } from 'console';
 
 const execPromise = promisify(exec);
 
@@ -67,11 +68,16 @@ export class YoutubeService {
   }
 
   async createFolderPlaylist(playlistId: string): Promise<IResponseFolder> {
+    // const SID =
+    //   'g.a000rAgZqyAyEyq2JZdHSsn1uQhVP-ZS2b_BfPtodpAnA5xd-FyZfE-uWl97mVTAx1IZ3UODtwACgYKAQMSARASFQHGX2MiQGkTipyvLOP2VR6i0a8wcRoVAUF8yKq0NVA6h5pNDHtwk5r6UeLV0076';
+    // const YOUR_HSID = 'AZ_Wdn2x7_hXyzKUB';
+    // const YOUR_SSID = 'Ap2HJHUiRPPZR_SU8';
     try {
       const yt = await Innertube.create({
         cache: new UniversalCache(false),
         generate_session_locally: true,
         location: 'PE',
+        // cookie: `SID=${SID}; HSID=${YOUR_HSID}; SSID=${YOUR_SSID};`,
       });
 
       const playlist = await yt.getPlaylist(playlistId);
@@ -128,6 +134,9 @@ export class YoutubeService {
         filename: folderName,
       };
     } catch (error) {
+      console.log('****************error*******************');
+      log;
+
       throw new NotFoundException(
         'La lista de reproucción no se puede descargar, asegurate de copiar un link que contenga la lista de reproducción',
       );

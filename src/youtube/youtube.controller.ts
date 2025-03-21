@@ -1,13 +1,28 @@
-import { Controller, Get, Query, Res } from '@nestjs/common';
+import { Controller, Get, Query, Req, Res } from '@nestjs/common';
 
 import { YoutubeService } from './youtube.service';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { unlink } from 'fs';
 import { ApiQuery } from '@nestjs/swagger';
 
 @Controller('youtube')
 export class YoutubeController {
   constructor(private yotubeService: YoutubeService) {}
+
+  @Get()
+  async initSesionAuth0(@Res({ passthrough: true }) res: Response) {
+    return await this.yotubeService.initSesionAuth0(res);
+  }
+
+  @Get('login')
+  async login(@Res({ passthrough: true }) res: Response, @Req() req: Request) {
+    return await this.yotubeService.login(req, res);
+  }
+
+  @Get('logout')
+  async logout(@Res({ passthrough: true }) res: Response) {
+    return await this.yotubeService.logout(res);
+  }
 
   @Get('list')
   @ApiQuery({

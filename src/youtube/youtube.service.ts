@@ -1,7 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { createWriteStream, existsSync, mkdirSync } from 'fs';
-import { ClientType, Innertube, UniversalCache, Utils } from 'youtubei.js';
-import { PlaylistVideo } from 'youtubei.js/dist/src/parser/nodes';
+import { Innertube, UniversalCache, Utils } from 'youtubei.js';
 import { join } from 'path';
 import { exec } from 'child_process';
 import * as sevenBin from '7zip-bin';
@@ -9,9 +12,13 @@ import { promisify } from 'util';
 import { IResponseFolder } from './interfaces/responseRarFolder';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
-import { OAuth2Client } from 'google-auth-library';
+import { Credentials, OAuth2Client } from 'google-auth-library';
 import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { ItemVideoAuth } from './interfaces/itemVideoAuth';
+import { MusicResponsiveListItem } from 'youtubei.js/dist/src/parser/nodes';
+import { ResponseToken } from './interfaces/responseToken';
+import { keyIdList } from './interfaces/keysParam';
 
 const execPromise = promisify(exec);
 
@@ -25,26 +32,36 @@ export class YoutubeService {
   private authorizationUrl: string | undefined;
   private clientId: string;
   private clientSecret: string;
-  private redirectUri = 'http://localhost:3005/youtube/login';
+  private redirectUri: string;
 
   constructor(private readonly configService: ConfigService) {
     this.clientId = this.configService.get<string>('YOUR_OAUTH2_CLIENT_ID');
     this.clientSecret = this.configService.get<string>(
       'YOUR_OAUTH2_CLIENT_SECRET',
     );
+    this.redirectUri = this.configService.get<string>('BASE_HOST') + '/login';
   }
 
-  async initSesionAuth0(res: Response) {
-    if (!this.innertube || true) {
-      console.info('Creating innertube instance.');
+  async downloadPlaylist(res: Response, tokens: Credentials, listUrl?: string) {
+    if (!listUrl) {
+      throw new BadRequestException(
+        'No se ha proporcionado una URL de lista de reproducción.',
+      );
+    }
+    await this.prepareSession(res, tokens);
+
+    //si hay cliente
+    await this.proccessCreateRarPlaylist(res, listUrl);
+  }
+
+  async prepareSession(res: Response, tokens: Credentials) {
+    if (!this.innertube) {
       this.innertube = await Innertube.create({
         cache: this.cache,
-        client_type: ClientType.TV,
       });
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       this.innertube.session?.on('update-credentials', async (_credentials) => {
-        console.info('Credentials updated.');
         await this.innertube?.session.oauth.cacheCredentials();
       });
     }
@@ -54,118 +71,120 @@ export class YoutubeService {
     }
 
     if (this.innertube.session.logged_in) {
-      console.info('Innertube instance is logged in.');
+      console.log('Ya esta logeado');
 
-      const userInfo = await this.innertube.account.getInfo();
-
-      console.log(userInfo.page.contents);
-
-      const newUrl = new URLSearchParams(
-        'https://www.youtube.com/watch?v=XUoXE3bmDJY&list=PLFNUImapc0zLsvRtMNFf7V-O1HOPuQCHZ',
-      );
-
-      const example = await this.innertube.music.getPlaylist(
-        newUrl.get('list'),
-      );
-
-      res.send({
-        userInfo: userInfo.page.contents,
-        example: example.items[0],
-      });
-
-      await this.getOneMusic(
-        'loca',
-        String(example.items[0].id),
-        String(example.items[0].title ?? 'sn'),
-      );
-
-      res.send({
-        userInfo: userInfo.page.contents,
-        example: example.items,
-      });
+      return;
     }
 
     if (!this.oAuth2Client) {
-      console.info('Creating OAuth2 client.');
-      console.log('Client ID:', this.clientId);
-      console.log('Client Secret:', this.clientSecret);
+      try {
+        this.oAuth2Client = new OAuth2Client(
+          this.clientId,
+          this.clientSecret,
+          this.redirectUri,
+        );
+
+        this.authorizationUrl = this.oAuth2Client.generateAuthUrl({
+          access_type: 'offline',
+          scope: [
+            'http://gdata.youtube.com',
+            'https://www.googleapis.com/auth/youtube',
+            'https://www.googleapis.com/auth/youtube.force-ssl',
+            'https://www.googleapis.com/auth/youtube-paid-content',
+          ],
+          include_granted_scopes: true,
+          prompt: 'consent',
+          redirect_uri: this.redirectUri,
+        });
+        if (tokens.access_token && tokens.refresh_token && tokens.expiry_date) {
+          await this.innertube.session.signIn({
+            access_token: tokens.access_token,
+            refresh_token: tokens.refresh_token,
+            expiry_date: new Date(tokens.expiry_date).toISOString(),
+            client: {
+              client_id: this.clientId,
+              client_secret: this.clientSecret,
+            },
+          });
+
+          await this.innertube.session.oauth.cacheCredentials();
+          return;
+        }
+
+        res.redirect(this.authorizationUrl);
+      } catch {
+        res.redirect(this.authorizationUrl);
+      }
+    } else {
+      return;
+    }
+  }
+
+  async initLogin(res: Response) {
+    if (!this.oAuth2Client) {
       this.oAuth2Client = new OAuth2Client(
         this.clientId,
         this.clientSecret,
         this.redirectUri,
       );
-
-      this.authorizationUrl = this.oAuth2Client.generateAuthUrl({
-        access_type: 'offline',
-        scope: [
-          'http://gdata.youtube.com',
-          'https://www.googleapis.com/auth/youtube',
-          'https://www.googleapis.com/auth/youtube.force-ssl',
-          'https://www.googleapis.com/auth/youtube-paid-content',
-        ],
-        include_granted_scopes: true,
-        prompt: 'consent',
-      });
-
-      console.info('Redirecting to authorization URL...');
-
-      res.redirect(this.authorizationUrl);
-    } else if (this.authorizationUrl) {
-      console.info(
-        'OAuth2 client already exists. Redirecting to authorization URL...',
-      );
-      res.redirect(this.authorizationUrl);
     }
+
+    this.authorizationUrl = this.oAuth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: [
+        'http://gdata.youtube.com',
+        'https://www.googleapis.com/auth/youtube',
+        'https://www.googleapis.com/auth/youtube.force-ssl',
+        'https://www.googleapis.com/auth/youtube-paid-content',
+      ],
+      include_granted_scopes: true,
+      prompt: 'consent',
+      redirect_uri: this.redirectUri,
+    });
+    res.redirect(this.authorizationUrl);
   }
 
-  async login(req: Request, res: Response) {
+  async loginCode(req: Request, res: Response): Promise<ResponseToken> {
     const { code } = req.query;
-    console.log('****code******');
-    console.log(code);
 
     if (!code) {
-      return res.send('No code provided.');
+      res.send('No code provided.');
+      return;
     }
 
-    console.log('*************** this.oAuth2Client*********************');
-    console.log(this.oAuth2Client);
-
-    console.log('*************** this.oAuth2Client*********************');
-    console.log(this.innertube);
-
-    if (!this.oAuth2Client || !this.innertube) {
-      return res.send(
-        'OAuth2 client or innertube instance is not initialized.',
+    if (!this.oAuth2Client) {
+      this.oAuth2Client = new OAuth2Client(
+        this.clientId,
+        this.clientSecret,
+        this.redirectUri,
       );
     }
-    console.log(this.oAuth2Client);
+    if (!this.innertube) {
+      this.innertube = await Innertube.create({
+        cache: this.cache,
+      });
+    }
 
     const { tokens } = await this.oAuth2Client.getToken(String(code));
 
-    try {
-      if (tokens.access_token && tokens.refresh_token && tokens.expiry_date) {
-        await this.innertube.session.signIn({
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-          expiry_date: new Date(tokens.expiry_date).toISOString(),
-          client: {
-            client_id: this.clientId,
-            client_secret: this.clientSecret,
-          },
-        });
+    if (tokens.access_token && tokens.refresh_token && tokens.expiry_date) {
+      await this.innertube.session.signIn({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expiry_date: new Date(tokens.expiry_date).toISOString(),
+        client: {
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+        },
+      });
 
-        await this.innertube.session.oauth.cacheCredentials();
-
-        console.log('Logged in successfully. Redirecting to home page...');
-
-        res.redirect('/youtube');
-      }
-    } catch (error) {
-      console.log('********errror');
-      console.log(error);
-
-      throw error;
+      await this.innertube.session.oauth.cacheCredentials();
     }
+    return {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expiry_date: new Date(tokens.expiry_date).toISOString(),
+    };
   }
 
   async logout(res: Response) {
@@ -208,33 +227,68 @@ export class YoutubeService {
     return sanitizedFilename;
   }
 
-  async proccessCreateRarPlaylistByUrl(url: string): Promise<IResponseFolder> {
-    const urlParams = new URLSearchParams(url);
-    const playlistId = urlParams.get('list');
-
-    if (!playlistId) {
-      throw new Error('Falta el parámetro "list"');
+  async proccessCreateRarPlaylist(res: Response, url: string) {
+    const params = new URLSearchParams(url);
+    const playListId = params.get(keyIdList);
+    if (!playListId) {
+      throw new BadRequestException(
+        'La url no contiene un id de lista de reproducción, copie una url cuando este reproduciendo el video dentro de una lista de reproducción, desde el navegador pre',
+      );
     }
 
-    const folder = await this.createFolderPlaylist(playlistId);
-    const rarFilePath = await this.createRar(folder.dirFile, folder.filename);
-    return rarFilePath;
+    const innerNotLogin = await Innertube.create({
+      cache: new UniversalCache(false),
+    });
+
+    const folderAuth = await this.innertube.music.getPlaylist(playListId);
+    const folderNotAuth = await innerNotLogin.getPlaylist(playListId);
+
+    const songs: ItemVideoAuth[] = folderAuth.items.map(
+      (e: MusicResponsiveListItem) => {
+        return {
+          name: e.title,
+          id: e.id,
+        };
+      },
+    );
+
+    const folder = await this.createFolderPlaylist(
+      String(folderNotAuth.info.title),
+      songs,
+    );
+    const { dirFile, filename } = await this.createRar(
+      folder.dirFile,
+      folder.filename,
+    );
+
+    res.download(dirFile, filename, (err) => {
+      if (err) {
+        console.error('Error al enviar archivo:', err);
+        // Opcional: manejá errores específicos como abortos
+      } else {
+        console.log(`Archivo enviado correctamente: ${dirFile}`);
+      }
+    });
+
+    // Borramos el archivo solo cuando la transmisión termina bien
+    res.on('finish', () => {
+      fs.unlink(dirFile, (unlinkErr) => {
+        if (unlinkErr) {
+          console.error('Error al eliminar el archivo:', unlinkErr);
+        } else {
+          console.log(`Archivo eliminado correctamente: ${dirFile}`);
+        }
+      });
+    });
   }
 
-  async proccessCreateRarPlaylist(
-    playlistId: string,
+  async createFolderPlaylist(
+    nameFolder: string,
+    songs: ItemVideoAuth[],
   ): Promise<IResponseFolder> {
-    const folder = await this.createFolderPlaylist(playlistId);
-    const rarFilePath = await this.createRar(folder.dirFile, folder.filename);
-    return rarFilePath;
-  }
-
-  async createFolderPlaylist(playlistId: string): Promise<IResponseFolder> {
     try {
-      const playlist = await this.innertube.getPlaylist(playlistId);
-
       const uniqueUuid = randomUUID();
-      const folderName = `${this.sanitizeName(playlist.info.title)} - ${uniqueUuid}`;
+      const folderName = `${this.sanitizeName(nameFolder)} - ${uniqueUuid}`;
       const dirFolder = join(this.downloadDir, folderName);
 
       if (!existsSync(dirFolder)) {
@@ -242,17 +296,17 @@ export class YoutubeService {
       }
 
       let counter = 1;
-      for (const song of playlist.items as PlaylistVideo[]) {
+      for (const song of songs) {
         try {
           await new Promise<void>(async (resolve, reject) => {
             try {
               const stream = await this.innertube.download(String(song.id), {
-                type: 'audio', // audio, video or video+audio
-                quality: 'best', // best, bestefficiency, 144p, 240p, 480p, 720p and so on.
-                client: 'YTMUSIC',
+                type: 'audio',
+                quality: 'best',
+                client: 'TV',
               });
 
-              const filePath = `${dirFolder}/${counter} {${this.sanitizeName(song.title.text).replace(/\//g, '')}.m4a`;
+              const filePath = `${dirFolder}/${counter} ${this.sanitizeName(song.name).replace(/\//g, '')}.mp3`;
               counter++;
               const file = createWriteStream(filePath);
 
@@ -270,7 +324,7 @@ export class YoutubeService {
           });
         } catch (error) {
           if (error instanceof Utils.InnertubeError) {
-            console.log('//////////////Fallo descargando', song.title.text);
+            console.log('//////////////Fallo descargando', song.name);
           }
           continue;
         }
@@ -316,56 +370,5 @@ export class YoutubeService {
       console.error('Error al crear el archivo 7z:', error);
       throw new Error('Error al crear archivo 7z');
     }
-  }
-
-  async innitInnerTube() {
-    console.log('*****************inner tube*************************');
-    console.log(this.innertube);
-
-    if (!this.innertube) {
-      this.innertube = await Innertube.create({
-        cache: this.cache,
-      });
-    }
-  }
-
-  async getOneMusic(nameList: string, videoId: string, songTitle: string) {
-    console.log('****************videoId');
-    console.log(videoId);
-
-    const uniqueUuid = randomUUID();
-    const folderName = `${this.sanitizeName(nameList)} - ${uniqueUuid}`;
-    const dirFolder = join(this.downloadDir, folderName);
-
-    if (!existsSync(dirFolder)) {
-      mkdirSync(dirFolder);
-    }
-
-    await new Promise<void>(async (resolve, reject) => {
-      try {
-        const stream = await this.innertube.download(videoId, {
-          type: 'audio', // audio, video or video+audio
-          quality: 'best', // best, bestefficiency, 144p, 240p, 480p, 720p and so on.
-          client: 'TV',
-        });
-
-        console.log('//////////////////stream');
-        console.log(stream);
-
-        const filePath = `${dirFolder}/{${this.sanitizeName(songTitle).replace(/\//g, '')}.m4a`;
-        const file = createWriteStream(filePath);
-
-        // Escribe los datos en el archivo
-        for await (const chunk of Utils.streamToIterable(stream)) {
-          file.write(chunk);
-        }
-        // Asegúrate de cerrar el archivo una vez que todo esté escrito
-        file.end(() => {
-          resolve();
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
   }
 }

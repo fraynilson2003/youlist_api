@@ -1,87 +1,37 @@
-import { Controller, Get, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Query, Req, Res } from '@nestjs/common';
 
 import { YoutubeService } from './youtube.service';
 import { Request, Response } from 'express';
-import { unlink } from 'fs';
-import { ApiQuery } from '@nestjs/swagger';
+import { Credentials } from 'google-auth-library';
+import { keyUrlList } from './interfaces/keysParam';
 
-@Controller('youtube')
+@Controller('')
 export class YoutubeController {
   constructor(private yotubeService: YoutubeService) {}
 
-  @Get()
-  async initSesionAuth0(@Res({ passthrough: true }) res: Response) {
-    return await this.yotubeService.initSesionAuth0(res);
+  @Get('/playlist/mp3')
+  async initSesionAuth0(
+    @Res({ passthrough: true }) res: Response,
+    @Body('tokens') tokens: Credentials,
+    @Query(keyUrlList) listUrl?: string,
+  ) {
+    try {
+      return await this.yotubeService.downloadPlaylist(res, tokens, listUrl);
+    } catch (error) {
+      console.log('********************error********************');
+
+      console.log(error);
+      throw error;
+    }
   }
 
   @Get('login')
   async login(@Res({ passthrough: true }) res: Response, @Req() req: Request) {
-    return await this.yotubeService.login(req, res);
+    return await this.yotubeService.loginCode(req, res);
   }
 
   @Get('logout')
   async logout(@Res({ passthrough: true }) res: Response) {
     return await this.yotubeService.logout(res);
-  }
-
-  @Get('list')
-  @ApiQuery({
-    name: 'list_id',
-    type: String,
-    example: 'PLFNUImapc0zJcOWstLHHBDRvmAewDqzD5',
-  })
-  async downloadAudio(
-    @Query('list_id') idPlayList: string,
-    @Res() response: Response,
-  ) {
-    const { dirFile, filename } =
-      await this.yotubeService.proccessCreateRarPlaylist(idPlayList);
-
-    response.download(dirFile, filename, (err) => {
-      if (err) {
-        console.error('Error al enviar archivo:', err);
-      } else {
-        console.log(`Archivo enviado correctamente: ${dirFile}`);
-        // Elimina el archivo después de enviarlo
-        unlink(dirFile, (unlinkErr) => {
-          if (unlinkErr) {
-            console.error('Error al eliminar el archivo:', unlinkErr);
-          } else {
-            console.log(`Archivo eliminado correctamente: ${dirFile}`);
-          }
-        });
-      }
-    });
-  }
-
-  @Get('list/url')
-  @ApiQuery({
-    name: 'url',
-    type: String,
-    example:
-      'https://www.youtube.com/watch?v=07EzMbVH3QE&list=PLFNUImapc0zJcOWstLHHBDRvmAewDqzD5',
-  })
-  async downloadAudioFromUrl(
-    @Query('url') url: string,
-    @Res() response: Response,
-  ) {
-    const { dirFile, filename } =
-      await this.yotubeService.proccessCreateRarPlaylistByUrl(url);
-
-    response.download(dirFile, filename, (err) => {
-      if (err) {
-        console.error('Error al enviar archivo:', err);
-      } else {
-        console.log(`Archivo enviado correctamente: ${dirFile}`);
-        // Elimina el archivo después de enviarlo
-        unlink(dirFile, (unlinkErr) => {
-          if (unlinkErr) {
-            console.error('Error al eliminar el archivo:', unlinkErr);
-          } else {
-            console.log(`Archivo eliminado correctamente: ${dirFile}`);
-          }
-        });
-      }
-    });
   }
 }

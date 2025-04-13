@@ -38,4 +38,5 @@ lerna-debug.log*
 .env
 
 downloads/music/*.m4a
+downloads/music/*.mp3
 downloads/rar/*.7z

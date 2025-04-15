@@ -17,8 +17,8 @@ import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { ItemVideoAuth } from './interfaces/itemVideoAuth';
 import { MusicResponsiveListItem } from 'youtubei.js/dist/src/parser/nodes';
-import { ResponseToken } from './interfaces/responseToken';
 import { keyIdList } from './interfaces/keysParam';
+import * as path from 'path';
 
 const execPromise = promisify(exec);
 
@@ -33,6 +33,7 @@ export class YoutubeService {
   private clientId: string;
   private clientSecret: string;
   private redirectUri: string;
+  private clientHost: string;
 
   constructor(private readonly configService: ConfigService) {
     this.clientId = this.configService.get<string>('YOUR_OAUTH2_CLIENT_ID');
@@ -40,6 +41,7 @@ export class YoutubeService {
       'YOUR_OAUTH2_CLIENT_SECRET',
     );
     this.redirectUri = this.configService.get<string>('BASE_HOST') + '/login';
+    this.clientHost = this.configService.get<string>('CLIENT_HOST');
   }
 
   async downloadPlaylist(res: Response, tokens: Credentials, listUrl?: string) {
@@ -48,13 +50,43 @@ export class YoutubeService {
         'No se ha proporcionado una URL de lista de reproducción.',
       );
     }
-    await this.prepareSession(res, tokens);
+    const result = await this.prepareSession(res, tokens);
+    if (result) {
+      await this.proccessCreateRarPlaylist(res, listUrl);
+    } else {
+      if (!this.oAuth2Client) {
+        this.oAuth2Client = new OAuth2Client(
+          this.clientId,
+          this.clientSecret,
+          this.redirectUri,
+        );
+      }
 
+      this.authorizationUrl = this.oAuth2Client.generateAuthUrl({
+        access_type: 'offline',
+        scope: [
+          'http://gdata.youtube.com',
+          'https://www.googleapis.com/auth/youtube',
+          'https://www.googleapis.com/auth/youtube.force-ssl',
+          'https://www.googleapis.com/auth/youtube-paid-content',
+        ],
+        include_granted_scopes: true,
+        prompt: 'consent',
+        redirect_uri: this.redirectUri,
+      });
+
+      return {
+        url: this.authorizationUrl,
+        type: 'redirect',
+      };
+    }
     //si hay cliente
-    await this.proccessCreateRarPlaylist(res, listUrl);
   }
 
-  async prepareSession(res: Response, tokens: Credentials) {
+  async prepareSession(
+    res: Response,
+    tokens: Credentials,
+  ): Promise<boolean | string> {
     if (!this.innertube) {
       this.innertube = await Innertube.create({
         cache: this.cache,
@@ -73,29 +105,11 @@ export class YoutubeService {
     if (this.innertube.session.logged_in) {
       console.log('Ya esta logeado');
 
-      return;
+      return true;
     }
 
-    if (!this.oAuth2Client) {
+    if (!this.oAuth2Client || !this.innertube) {
       try {
-        this.oAuth2Client = new OAuth2Client(
-          this.clientId,
-          this.clientSecret,
-          this.redirectUri,
-        );
-
-        this.authorizationUrl = this.oAuth2Client.generateAuthUrl({
-          access_type: 'offline',
-          scope: [
-            'http://gdata.youtube.com',
-            'https://www.googleapis.com/auth/youtube',
-            'https://www.googleapis.com/auth/youtube.force-ssl',
-            'https://www.googleapis.com/auth/youtube-paid-content',
-          ],
-          include_granted_scopes: true,
-          prompt: 'consent',
-          redirect_uri: this.redirectUri,
-        });
         if (tokens.access_token && tokens.refresh_token && tokens.expiry_date) {
           await this.innertube.session.signIn({
             access_token: tokens.access_token,
@@ -108,15 +122,16 @@ export class YoutubeService {
           });
 
           await this.innertube.session.oauth.cacheCredentials();
-          return;
+          return true;
         }
-
-        res.redirect(this.authorizationUrl);
+        //no esta logeado, redirigimos
+        return false;
       } catch {
-        res.redirect(this.authorizationUrl);
+        console.log('No esta logeado, redirigimos 2');
+        return false;
       }
     } else {
-      return;
+      return false;
     }
   }
 
@@ -144,7 +159,7 @@ export class YoutubeService {
     res.redirect(this.authorizationUrl);
   }
 
-  async loginCode(req: Request, res: Response): Promise<ResponseToken> {
+  async loginCode(req: Request, res: Response) {
     const { code } = req.query;
 
     if (!code) {
@@ -180,24 +195,18 @@ export class YoutubeService {
 
       await this.innertube.session.oauth.cacheCredentials();
     }
-    return {
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
-      expiry_date: new Date(tokens.expiry_date).toISOString(),
-    };
+    res.redirect(this.clientHost);
   }
 
-  async logout(res: Response) {
+  async logout() {
     if (!this.innertube) {
-      return res.send('Innertube instance is not initialized.');
+      return;
     }
 
     await this.innertube.session.signOut();
     await this.innertube?.session.oauth.removeCache();
 
     console.log('Logged out successfully. Redirecting to home page...');
-
-    res.redirect('/');
   }
 
   /**************  LOGICA DE DESCARGA ************************* */
@@ -232,7 +241,7 @@ export class YoutubeService {
     const playListId = params.get(keyIdList);
     if (!playListId) {
       throw new BadRequestException(
-        'La url no contiene un id de lista de reproducción, copie una url cuando este reproduciendo el video dentro de una lista de reproducción, desde el navegador pre',
+        'La url no contiene un id de lista de reproducción, copie una url cuando este reproduciendo el video dentro de una lista de reproducción',
       );
     }
 
@@ -261,7 +270,14 @@ export class YoutubeService {
       folder.filename,
     );
 
-    res.download(dirFile, filename, (err) => {
+    const resolveDirFile = path.resolve(dirFile);
+
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    );
+
+    res.download(resolveDirFile, filename, (err) => {
       if (err) {
         console.error('Error al enviar archivo:', err);
         // Opcional: manejá errores específicos como abortos

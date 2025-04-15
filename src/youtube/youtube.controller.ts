@@ -11,17 +11,20 @@ export class YoutubeController {
 
   @Get('/playlist/mp3')
   async initSesionAuth0(
-    @Res({ passthrough: true }) res: Response,
+    @Res() res: Response,
     @Body('tokens') tokens: Credentials,
     @Query(keyUrlList) listUrl?: string,
   ) {
-    try {
-      return await this.yotubeService.downloadPlaylist(res, tokens, listUrl);
-    } catch (error) {
-      console.log('********************error********************');
+    const result = await this.yotubeService.downloadPlaylist(
+      res,
+      tokens,
+      listUrl,
+    );
 
-      console.log(error);
-      throw error;
+    if (result && result.type && result.type === 'redirect') {
+      res.status(401).json({
+        url: result.url,
+      });
     }
   }
 
@@ -31,7 +34,7 @@ export class YoutubeController {
   }
 
   @Get('logout')
-  async logout(@Res({ passthrough: true }) res: Response) {
-    return await this.yotubeService.logout(res);
+  async logout() {
+    return await this.yotubeService.logout();
   }
 }

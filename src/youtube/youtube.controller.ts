@@ -1,29 +1,50 @@
-import { Body, Controller, Get, Query, Req, Res } from '@nestjs/common';
+import { Controller, Get, Query, Req, Res } from '@nestjs/common';
 
 import { YoutubeService } from './youtube.service';
 import { Request, Response } from 'express';
-import { Credentials } from 'google-auth-library';
 import { keyUrlList } from './interfaces/keysParam';
+import { join } from 'path';
+import fs from 'fs';
 
-@Controller('')
+@Controller()
 export class YoutubeController {
   constructor(private yotubeService: YoutubeService) {}
 
   @Get('/playlist/mp3')
   async initSesionAuth0(
     @Res() res: Response,
-    @Body('tokens') tokens: Credentials,
     @Query(keyUrlList) listUrl?: string,
   ) {
-    const result = await this.yotubeService.downloadPlaylist(
-      res,
-      tokens,
-      listUrl,
-    );
+    const { type, value } = await this.yotubeService.downloadPlaylist(listUrl);
+    if (type === 'url') {
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename*=UTF-8''${encodeURIComponent(value)}`,
+      );
 
-    if (result && result.type && result.type === 'redirect') {
-      res.status(401).json({
-        url: result.url,
+      const filePath = join(__dirname, `../../downloads/rar/${value}`);
+
+      res.download(filePath, value, (err) => {
+        if (err) {
+          console.error('Error al enviar archivo:', err);
+          // Opcional: manejá errores específicos como abortos
+        } else {
+          console.log(`Archivo enviado correctamente: ${filePath}`);
+        }
+      });
+      // Borramos el archivo solo cuando la transmisión termina bien
+      res.on('finish', () => {
+        fs.unlink(value, (unlinkErr) => {
+          if (unlinkErr) {
+            console.error('Error al eliminar el archivo:', unlinkErr);
+          } else {
+            console.log(`Archivo eliminado correctamente: ${value}`);
+          }
+        });
+      });
+    } else {
+      return res.status(401).json({
+        url: value,
       });
     }
   }

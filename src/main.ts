@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as dotenv from 'dotenv';
+import * as morgan from 'morgan';
 
 async function bootstrap() {
   dotenv.config();
@@ -10,7 +11,7 @@ async function bootstrap() {
   const PORT = Number(process.env.PORT || 3005);
 
   app.enableCors({
-    origin: '*',
+    origin: ['http://localhost:3000', 'https://youlist-web.vercel.app/'],
     methods: '*',
     exposedHeaders: 'Content-Disposition',
   });
@@ -28,6 +29,8 @@ async function bootstrap() {
       persistAuthorization: true,
     },
   });
+
+  app.use(morgan('dev'));
 
   await app.listen(PORT);
   console.log(`********** Server Running ${PORT} **********`);

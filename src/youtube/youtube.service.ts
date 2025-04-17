@@ -9,10 +9,13 @@ import { join } from 'path';
 import { exec } from 'child_process';
 import * as sevenBin from '7zip-bin';
 import { promisify } from 'util';
-import { IResponseFolder } from './interfaces/responseRarFolder';
+import {
+  IResponseFolder,
+  ResponseServiceDownloadList,
+} from './interfaces/responseRarFolder';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
-import { Credentials, OAuth2Client } from 'google-auth-library';
+import { OAuth2Client } from 'google-auth-library';
 import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { ItemVideoAuth } from './interfaces/itemVideoAuth';
@@ -44,15 +47,17 @@ export class YoutubeService {
     this.clientHost = this.configService.get<string>('CLIENT_HOST');
   }
 
-  async downloadPlaylist(res: Response, tokens: Credentials, listUrl?: string) {
+  async downloadPlaylist(
+    listUrl?: string,
+  ): Promise<ResponseServiceDownloadList> {
     if (!listUrl) {
       throw new BadRequestException(
         'No se ha proporcionado una URL de lista de reproducción.',
       );
     }
-    const result = await this.prepareSession(res, tokens);
+    const result = await this.prepareSession();
     if (result) {
-      await this.proccessCreateRarPlaylist(res, listUrl);
+      return await this.proccessCreateRarPlaylist(listUrl);
     } else {
       if (!this.oAuth2Client) {
         this.oAuth2Client = new OAuth2Client(
@@ -76,17 +81,14 @@ export class YoutubeService {
       });
 
       return {
-        url: this.authorizationUrl,
         type: 'redirect',
+        value: this.authorizationUrl,
       };
     }
     //si hay cliente
   }
 
-  async prepareSession(
-    res: Response,
-    tokens: Credentials,
-  ): Promise<boolean | string> {
+  async prepareSession(): Promise<boolean | string> {
     if (!this.innertube) {
       this.innertube = await Innertube.create({
         cache: this.cache,
@@ -108,31 +110,7 @@ export class YoutubeService {
       return true;
     }
 
-    if (!this.oAuth2Client || !this.innertube) {
-      try {
-        if (tokens.access_token && tokens.refresh_token && tokens.expiry_date) {
-          await this.innertube.session.signIn({
-            access_token: tokens.access_token,
-            refresh_token: tokens.refresh_token,
-            expiry_date: new Date(tokens.expiry_date).toISOString(),
-            client: {
-              client_id: this.clientId,
-              client_secret: this.clientSecret,
-            },
-          });
-
-          await this.innertube.session.oauth.cacheCredentials();
-          return true;
-        }
-        //no esta logeado, redirigimos
-        return false;
-      } catch {
-        console.log('No esta logeado, redirigimos 2');
-        return false;
-      }
-    } else {
-      return false;
-    }
+    return false;
   }
 
   async initLogin(res: Response) {
@@ -236,7 +214,9 @@ export class YoutubeService {
     return sanitizedFilename;
   }
 
-  async proccessCreateRarPlaylist(res: Response, url: string) {
+  async proccessCreateRarPlaylist(
+    url: string,
+  ): Promise<ResponseServiceDownloadList> {
     const params = new URLSearchParams(url);
     const playListId = params.get(keyIdList);
     if (!playListId) {
@@ -272,30 +252,14 @@ export class YoutubeService {
 
     const resolveDirFile = path.resolve(dirFile);
 
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
-    );
+    if (existsSync(resolveDirFile)) {
+      console.log('El archivo existe:', resolveDirFile);
+    }
 
-    res.download(resolveDirFile, filename, (err) => {
-      if (err) {
-        console.error('Error al enviar archivo:', err);
-        // Opcional: manejá errores específicos como abortos
-      } else {
-        console.log(`Archivo enviado correctamente: ${dirFile}`);
-      }
-    });
-
-    // Borramos el archivo solo cuando la transmisión termina bien
-    res.on('finish', () => {
-      fs.unlink(dirFile, (unlinkErr) => {
-        if (unlinkErr) {
-          console.error('Error al eliminar el archivo:', unlinkErr);
-        } else {
-          console.log(`Archivo eliminado correctamente: ${dirFile}`);
-        }
-      });
-    });
+    return {
+      type: 'url',
+      value: filename,
+    };
   }
 
   async createFolderPlaylist(

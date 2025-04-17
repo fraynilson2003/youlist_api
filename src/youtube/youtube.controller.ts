@@ -4,7 +4,7 @@ import { YoutubeService } from './youtube.service';
 import { Request, Response } from 'express';
 import { keyUrlList } from './interfaces/keysParam';
 import { join } from 'path';
-import fs from 'fs';
+import * as fs from 'fs';
 
 @Controller()
 export class YoutubeController {
@@ -33,14 +33,19 @@ export class YoutubeController {
         }
       });
       // Borramos el archivo solo cuando la transmisión termina bien
+
       res.on('finish', () => {
-        fs.unlink(value, (unlinkErr) => {
-          if (unlinkErr) {
-            console.error('Error al eliminar el archivo:', unlinkErr);
-          } else {
-            console.log(`Archivo eliminado correctamente: ${value}`);
-          }
-        });
+        if (fs.existsSync(filePath)) {
+          fs.unlink(filePath, (unlinkErr) => {
+            if (unlinkErr) {
+              console.error('Error al eliminar el archivo:', unlinkErr);
+            } else {
+              console.log(`Archivo eliminado correctamente: ${filePath}`);
+            }
+          });
+        } else {
+          console.log('Archivos no se estan elminando');
+        }
       });
     } else {
       return res.status(401).json({

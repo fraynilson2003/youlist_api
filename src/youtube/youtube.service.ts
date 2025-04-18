@@ -246,10 +246,18 @@ export class YoutubeService {
       String(folderNotAuth.info.title),
       songs,
     );
+
     const { dirFile, filename } = await this.createRar(
       folder.dirFile,
       folder.filename,
     );
+
+    const stats = await stat(dirFile);
+    console.log('***********************rar');
+    console.log({
+      name: filename,
+      sizeInBytes: stats.size,
+    });
 
     const resolveDirFile = path.resolve(dirFile);
 

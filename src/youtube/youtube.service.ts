@@ -6,9 +6,6 @@ import {
 import { createWriteStream, existsSync, mkdirSync } from 'fs';
 import { Innertube, UniversalCache, Utils } from 'youtubei.js';
 import { join } from 'path';
-import { exec } from 'child_process';
-import * as sevenBin from '7zip-bin';
-import { promisify } from 'util';
 import {
   IResponseFolder,
   ResponseServiceDownloadList,
@@ -23,8 +20,7 @@ import { MusicResponsiveListItem } from 'youtubei.js/dist/src/parser/nodes';
 import { keyIdList } from './interfaces/keysParam';
 import * as path from 'path';
 import { readdir, stat } from 'fs/promises';
-
-const execPromise = promisify(exec);
+import * as AdmZip from 'adm-zip';
 
 @Injectable()
 export class YoutubeService {
@@ -247,7 +243,7 @@ export class YoutubeService {
       songs,
     );
 
-    const { dirFile, filename } = await this.createRar(
+    const { dirFile, filename } = await this.createZip(
       folder.dirFile,
       folder.filename,
     );
@@ -337,32 +333,26 @@ export class YoutubeService {
     }
   }
 
-  async createRar(
+  async createZip(
     folderPath: string,
     folderName: string,
   ): Promise<IResponseFolder> {
-    const rarNameFolder = `${folderName}.7z`;
-    const outputFile = join(this.rarDir, `${rarNameFolder}`); // Ruta del archivo .7z a crear
+    const zip = new AdmZip();
+    const zipFilename = `${folderName}.zip`;
+    const outputFile = join(this.rarDir, zipFilename);
 
-    // Comando para crear el archivo .7z con los archivos seleccionados
-    const sevenCommand = `"${sevenBin.path7za}" a "${outputFile}" "${folderPath}\\*"`;
+    zip.addLocalFolder(folderPath);
+    zip.writeZip(outputFile);
 
-    try {
-      // Ejecutar el comando para crear el archivo .7z
-      await execPromise(sevenCommand);
-
-      if (fs.existsSync(folderPath)) {
-        fs.rmSync(folderPath, { recursive: true, force: true });
-      }
-
-      return {
-        filename: rarNameFolder,
-        dirFile: outputFile,
-      };
-    } catch (error) {
-      console.error('Error al crear el archivo 7z:', error);
-      throw new Error('Error al crear archivo 7z');
+    // Elimina la carpeta original después de crear el zip
+    if (fs.existsSync(folderPath)) {
+      fs.rmSync(folderPath, { recursive: true, force: true });
     }
+
+    return {
+      filename: zipFilename,
+      dirFile: outputFile,
+    };
   }
 
   async getFilesWithSize(folderPath: string) {

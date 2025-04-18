@@ -22,6 +22,7 @@ import { ItemVideoAuth } from './interfaces/itemVideoAuth';
 import { MusicResponsiveListItem } from 'youtubei.js/dist/src/parser/nodes';
 import { keyIdList } from './interfaces/keysParam';
 import * as path from 'path';
+import { readdir, stat } from 'fs/promises';
 
 const execPromise = promisify(exec);
 
@@ -310,6 +311,10 @@ export class YoutubeService {
         }
       }
 
+      const filesData = await this.getFilesWithSize(dirFolder);
+      console.log('*****************filesData');
+      console.log(filesData);
+
       return {
         dirFile: dirFolder,
         filename: folderName,
@@ -349,6 +354,30 @@ export class YoutubeService {
     } catch (error) {
       console.error('Error al crear el archivo 7z:', error);
       throw new Error('Error al crear archivo 7z');
+    }
+  }
+
+  async getFilesWithSize(folderPath: string) {
+    try {
+      const files = await readdir(folderPath);
+      const results = [];
+
+      for (const file of files) {
+        const filePath = join(folderPath, file);
+        const stats = await stat(filePath);
+
+        if (stats.isFile()) {
+          results.push({
+            name: file,
+            sizeInBytes: stats.size,
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error('Error reading folder:', error);
+      return [];
     }
   }
 }

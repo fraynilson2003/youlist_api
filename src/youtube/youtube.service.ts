@@ -103,7 +103,14 @@ export class YoutubeService {
 
     if (this.innertube.session.logged_in) {
       console.log('Ya esta logeado');
+      try {
+        const example = 'kJQP7kiw5Fk';
+        await this.innertube.getBasicInfo(example, 'TV');
+      } catch (error) {
+        console.log('Error al obtener información básica del video:', error);
 
+        return false;
+      }
       return true;
     }
 
@@ -211,6 +218,165 @@ export class YoutubeService {
     return sanitizedFilename;
   }
 
+  // async createFolderPlaylist(
+  //   nameFolder: string,
+  //   songs: ItemVideoAuth[],
+  // ): Promise<IResponseFolder> {
+  //   try {
+  //     const uniqueUuid = randomUUID();
+  //     const folderName = `${this.sanitizeName(nameFolder)} - ${uniqueUuid}`;
+  //     const dirFolder = join(this.downloadDir, folderName);
+
+  //     if (!existsSync(dirFolder)) {
+  //       mkdirSync(dirFolder);
+  //     }
+
+  //     const divideSongs = [...Array(Math.ceil(songs.length / 10))].map((_, i) =>
+  //       songs.slice(i * 10, i * 10 + 10),
+  //     );
+
+  //     let counter = 1;
+  //     for (const partSong of divideSongs) {
+  //       try {
+  //         const listPromises: Promise<void>[] = [];
+  //         for (const song of partSong) {
+  //           const newMusic = new Promise<void>(async (resolve, reject) => {
+  //             try {
+  //               const stream = await this.innertube.download(String(song.id), {
+  //                 type: 'audio',
+  //                 quality: 'best',
+  //                 client: 'TV',
+  //               });
+
+  //               const filePath = `${dirFolder}/${counter} ${this.sanitizeName(song.name).replace(/\//g, '')}.mp3`;
+  //               counter++;
+  //               const file = createWriteStream(filePath);
+
+  //               // Escribe los datos en el archivo
+  //               for await (const chunk of Utils.streamToIterable(stream)) {
+  //                 file.write(chunk);
+  //               }
+  //               // Asegúrate de cerrar el archivo una vez que todo esté escrito
+  //               file.end(() => {
+  //                 resolve();
+  //               });
+  //             } catch (error) {
+  //               if (error instanceof Utils.InnertubeError) {
+  //                 console.log('//////////////Fallo descargando', song.name);
+  //               }
+  //               reject(error);
+  //             }
+  //           });
+  //           listPromises.push(newMusic);
+  //         }
+  //         await Promise.all(listPromises);
+  //       } catch (error) {
+  //         continue;
+  //       }
+  //     }
+
+  //     const filesData = await this.getFilesWithSize(dirFolder);
+  //     console.log('*****************filesData');
+  //     console.log(filesData);
+
+  //     return {
+  //       dirFile: dirFolder,
+  //       filename: folderName,
+  //     };
+  //   } catch (error) {
+  //     console.log('****************error descargando*******************');
+  //     console.log(error);
+
+  //     throw new NotFoundException(
+  //       'La lista de reproucción no se puede descargar, asegurate de copiar un link que contenga la lista de reproducción',
+  //     );
+  //   }
+  // }
+
+  async createFolderPlaylist(
+    nameFolder: string,
+    songs: ItemVideoAuth[],
+  ): Promise<IResponseFolder> {
+    try {
+      const uniqueUuid = randomUUID();
+      const folderName = `${this.sanitizeName(nameFolder)} - ${uniqueUuid}`;
+      const dirFolder = join(this.downloadDir, folderName);
+
+      if (!existsSync(dirFolder)) {
+        mkdirSync(dirFolder);
+      }
+
+      songs = songs.filter((song) => song.id !== undefined);
+
+      const divideSongs = [...Array(Math.ceil(songs.length / 10))].map((_, i) =>
+        songs.slice(i * 10, i * 10 + 10),
+      );
+
+      console.log('**********************divideSongs');
+      console.log(divideSongs);
+
+      let counter = 1;
+      for (const partSong of divideSongs) {
+        try {
+          const listPromises: Promise<void>[] = [];
+
+          for (const song of partSong) {
+            const newMusic = new Promise<void>(async (resolve, reject) => {
+              try {
+                if (!song.id) {
+                  resolve();
+                }
+                const stream = await this.innertube.download(String(song.id), {
+                  type: 'audio',
+                  quality: 'best',
+                  client: 'TV',
+                });
+
+                const filePath = `${dirFolder}/${counter} ${this.sanitizeName(song.name).replace(/\//g, '')}.mp3`;
+                counter++;
+                const file = createWriteStream(filePath);
+
+                // Escribe los datos en el archivo
+                for await (const chunk of Utils.streamToIterable(stream)) {
+                  file.write(chunk);
+                }
+                // Asegúrate de cerrar el archivo una vez que todo esté escrito
+                file.end(() => {
+                  resolve();
+                });
+              } catch (error) {
+                if (error instanceof Utils.InnertubeError) {
+                  console.log('//////////////Fallo descargando', song.name);
+                }
+                reject(error);
+              }
+            });
+            listPromises.push(newMusic);
+          }
+          await Promise.all(listPromises);
+        } catch (error) {
+          continue;
+        }
+      }
+
+      const filesData = await this.getFilesWithSize(dirFolder);
+      console.log('*****************filesData');
+      console.log(filesData);
+
+      return {
+        dirFile: dirFolder,
+        filename: folderName,
+      };
+    } catch (error) {
+      console.log('****************error descargando*******************');
+      console.log(error);
+
+      throw new NotFoundException(
+        'La lista de reproucción no se puede descargar, asegurate de copiar un link que contenga la lista de reproducción',
+      );
+    }
+  }
+
   async proccessCreateRarPlaylist(
     url: string,
   ): Promise<ResponseServiceDownloadList> {
@@ -265,72 +431,6 @@ export class YoutubeService {
       type: 'url',
       value: filename,
     };
-  }
-
-  async createFolderPlaylist(
-    nameFolder: string,
-    songs: ItemVideoAuth[],
-  ): Promise<IResponseFolder> {
-    try {
-      const uniqueUuid = randomUUID();
-      const folderName = `${this.sanitizeName(nameFolder)} - ${uniqueUuid}`;
-      const dirFolder = join(this.downloadDir, folderName);
-
-      if (!existsSync(dirFolder)) {
-        mkdirSync(dirFolder);
-      }
-
-      let counter = 1;
-      for (const song of songs) {
-        try {
-          await new Promise<void>(async (resolve, reject) => {
-            try {
-              const stream = await this.innertube.download(String(song.id), {
-                type: 'audio',
-                quality: 'best',
-                client: 'TV',
-              });
-
-              const filePath = `${dirFolder}/${counter} ${this.sanitizeName(song.name).replace(/\//g, '')}.mp3`;
-              counter++;
-              const file = createWriteStream(filePath);
-
-              // Escribe los datos en el archivo
-              for await (const chunk of Utils.streamToIterable(stream)) {
-                file.write(chunk);
-              }
-              // Asegúrate de cerrar el archivo una vez que todo esté escrito
-              file.end(() => {
-                resolve();
-              });
-            } catch (error) {
-              reject(error);
-            }
-          });
-        } catch (error) {
-          if (error instanceof Utils.InnertubeError) {
-            console.log('//////////////Fallo descargando', song.name);
-          }
-          continue;
-        }
-      }
-
-      const filesData = await this.getFilesWithSize(dirFolder);
-      console.log('*****************filesData');
-      console.log(filesData);
-
-      return {
-        dirFile: dirFolder,
-        filename: folderName,
-      };
-    } catch (error) {
-      console.log('****************error*******************');
-      console.log(error);
-
-      throw new NotFoundException(
-        'La lista de reproucción no se puede descargar, asegurate de copiar un link que contenga la lista de reproducción',
-      );
-    }
   }
 
   async createZip(

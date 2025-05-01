@@ -6,7 +6,8 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "node scripts/updateYoutubeLib.js && nest build",
+    "build2": "node scripts/updateYoutubeLib.js && nest build",
+    "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start2": "nest start",

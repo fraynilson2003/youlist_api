@@ -18,9 +18,9 @@ import { ConfigService } from '@nestjs/config';
 import { ItemVideoAuth } from './interfaces/itemVideoAuth';
 import { MusicResponsiveListItem } from 'youtubei.js/dist/src/parser/nodes';
 import { keyIdList } from './interfaces/keysParam';
-import * as path from 'path';
 import { readdir, stat } from 'fs/promises';
 import * as AdmZip from 'adm-zip';
+import { InputFolder } from './interfaces/namefolder';
 
 @Injectable()
 export class YoutubeService {
@@ -293,14 +293,66 @@ export class YoutubeService {
   //   }
   // }
 
+  async proccessCreateRarPlaylist(
+    url: string,
+  ): Promise<ResponseServiceDownloadList> {
+    const params = new URLSearchParams(url);
+    const playListId = params.get(keyIdList);
+    if (!playListId) {
+      throw new BadRequestException(
+        'La url no contiene un id de lista de reproducción, copie una url cuando este reproduciendo el video dentro de una lista de reproducción',
+      );
+    }
+
+    const innerNotLogin = await Innertube.create({
+      cache: new UniversalCache(false),
+    });
+
+    const folderAuth = await this.innertube.music.getPlaylist(playListId);
+    const folderNotAuth = await innerNotLogin.getPlaylist(playListId);
+
+    const songs: ItemVideoAuth[] = folderAuth.items.map(
+      (e: MusicResponsiveListItem) => {
+        return {
+          name: e.title,
+          id: e.id,
+        };
+      },
+    );
+
+    const folder = await this.createFolderPlaylist(
+      String(folderNotAuth.info.title),
+      songs,
+    );
+
+    const responseZip = await this.createZip({
+      filename: folder.filename,
+      filenameUnique: folder.filenameUnique,
+      filepath: folder.filepath,
+    });
+
+    const stats = await stat(responseZip.filepath);
+    console.log('***********************rar');
+    console.log({
+      name: responseZip.filenameUnique,
+      sizeInBytes: stats.size,
+    });
+
+    return {
+      type: 'url',
+      value: responseZip,
+    };
+  }
+
   async createFolderPlaylist(
-    nameFolder: string,
+    filename: string,
     songs: ItemVideoAuth[],
   ): Promise<IResponseFolder> {
     try {
       const uniqueUuid = randomUUID();
-      const folderName = `${this.sanitizeName(nameFolder)} - ${uniqueUuid}`;
-      const dirFolder = join(this.downloadDir, folderName);
+      const filenameUnique = `${this.sanitizeName(filename)} --- ${uniqueUuid}`;
+      const filename2 = this.sanitizeName(filename);
+      const dirFolder = join(this.downloadDir, filenameUnique);
 
       if (!existsSync(dirFolder)) {
         mkdirSync(dirFolder);
@@ -308,8 +360,15 @@ export class YoutubeService {
 
       songs = songs.filter((song) => song.id !== undefined);
 
-      const divideSongs = [...Array(Math.ceil(songs.length / 10))].map((_, i) =>
-        songs.slice(i * 10, i * 10 + 10),
+      const limitMaxDownload = 10;
+
+      const divideSongs = [
+        ...Array(Math.ceil(songs.length / limitMaxDownload)),
+      ].map((_, i) =>
+        songs.slice(
+          i * limitMaxDownload,
+          i * limitMaxDownload + limitMaxDownload,
+        ),
       );
 
       console.log('**********************divideSongs');
@@ -364,8 +423,9 @@ export class YoutubeService {
       console.log(filesData);
 
       return {
-        dirFile: dirFolder,
-        filename: folderName,
+        filepath: dirFolder,
+        filenameUnique: filenameUnique,
+        filename: filename2,
       };
     } catch (error) {
       console.log('****************error descargando*******************');
@@ -377,81 +437,24 @@ export class YoutubeService {
     }
   }
 
-  async proccessCreateRarPlaylist(
-    url: string,
-  ): Promise<ResponseServiceDownloadList> {
-    const params = new URLSearchParams(url);
-    const playListId = params.get(keyIdList);
-    if (!playListId) {
-      throw new BadRequestException(
-        'La url no contiene un id de lista de reproducción, copie una url cuando este reproduciendo el video dentro de una lista de reproducción',
-      );
-    }
-
-    const innerNotLogin = await Innertube.create({
-      cache: new UniversalCache(false),
-    });
-
-    const folderAuth = await this.innertube.music.getPlaylist(playListId);
-    const folderNotAuth = await innerNotLogin.getPlaylist(playListId);
-
-    const songs: ItemVideoAuth[] = folderAuth.items.map(
-      (e: MusicResponsiveListItem) => {
-        return {
-          name: e.title,
-          id: e.id,
-        };
-      },
-    );
-
-    const folder = await this.createFolderPlaylist(
-      String(folderNotAuth.info.title),
-      songs,
-    );
-
-    const { dirFile, filename } = await this.createZip(
-      folder.dirFile,
-      folder.filename,
-    );
-
-    const stats = await stat(dirFile);
-    console.log('***********************rar');
-    console.log({
-      name: filename,
-      sizeInBytes: stats.size,
-    });
-
-    const resolveDirFile = path.resolve(dirFile);
-
-    if (existsSync(resolveDirFile)) {
-      console.log('El archivo existe:', resolveDirFile);
-    }
-
-    return {
-      type: 'url',
-      value: filename,
-    };
-  }
-
-  async createZip(
-    folderPath: string,
-    folderName: string,
-  ): Promise<IResponseFolder> {
+  async createZip(input: InputFolder): Promise<IResponseFolder> {
     const zip = new AdmZip();
-    const zipFilename = `${folderName}.zip`;
-    const outputFile = join(this.rarDir, zipFilename);
+    const filenameUnique = `${input.filenameUnique}.zip`;
+    const filename = `${input.filename}.zip`;
+    const outputFile = join(this.rarDir, filenameUnique);
 
-    zip.addLocalFolder(folderPath);
+    zip.addLocalFolder(input.filepath);
     zip.writeZip(outputFile);
 
     // Elimina la carpeta original después de crear el zip
-    if (fs.existsSync(folderPath)) {
-      fs.rmSync(folderPath, { recursive: true, force: true });
+    if (fs.existsSync(input.filepath)) {
+      fs.rmSync(input.filepath, { recursive: true, force: true });
     }
 
     return {
-      filename: zipFilename,
-      dirFile: outputFile,
+      filename: filename,
+      filepath: outputFile,
+      filenameUnique: filenameUnique,
     };
   }
 

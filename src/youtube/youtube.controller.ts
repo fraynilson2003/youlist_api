@@ -3,8 +3,8 @@ import { Controller, Get, Query, Req, Res } from '@nestjs/common';
 import { YoutubeService } from './youtube.service';
 import { Request, Response } from 'express';
 import { keyUrlList } from './interfaces/keysParam';
-import { join } from 'path';
 import * as fs from 'fs';
+import { IResponseFolder } from './interfaces/responseRarFolder';
 
 @Controller()
 export class YoutubeController {
@@ -17,30 +17,33 @@ export class YoutubeController {
   ) {
     const { type, value } = await this.yotubeService.downloadPlaylist(listUrl);
     if (type === 'url') {
+      const { filename, filenameUnique, filepath } = value as IResponseFolder;
+
+      console.log('*******filepath');
+      console.log(filepath);
+
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename*=UTF-8''${encodeURIComponent(value)}`,
+        `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
       );
 
-      const filePath = join(__dirname, `../../downloads/rar/${value}`);
-
-      res.download(filePath, value, (err) => {
+      res.download(filepath, filename, (err) => {
         if (err) {
           console.error('Error al enviar archivo:', err);
           // Opcional: manejá errores específicos como abortos
         } else {
-          console.log(`Archivo enviado correctamente: ${filePath}`);
+          console.log(`Archivo enviado correctamente: ${filenameUnique}`);
         }
       });
       // Borramos el archivo solo cuando la transmisión termina bien
 
       res.on('finish', () => {
-        if (fs.existsSync(filePath)) {
-          fs.unlink(filePath, (unlinkErr) => {
+        if (fs.existsSync(filepath)) {
+          fs.unlink(filepath, (unlinkErr) => {
             if (unlinkErr) {
               console.error('Error al eliminar el archivo:', unlinkErr);
             } else {
-              console.log(`Archivo eliminado correctamente: ${filePath}`);
+              console.log(`Archivo eliminado correctamente: ${filepath}`);
             }
           });
         } else {

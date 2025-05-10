@@ -1,9 +1,10 @@
 export interface IResponseFolder {
-  dirFile: string;
+  filepath: string;
+  filenameUnique: string;
   filename: string;
 }
 
 export interface ResponseServiceDownloadList {
   type: 'url' | 'redirect';
-  value: string;
+  value: any;
 }

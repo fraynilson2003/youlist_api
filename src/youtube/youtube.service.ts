@@ -21,8 +21,6 @@ import { keyIdList } from './interfaces/keysParam';
 import { readdir, stat } from 'fs/promises';
 import * as AdmZip from 'adm-zip';
 import { InputFolder } from './interfaces/namefolder';
-import { Playlist as PlaylistYTMusic } from 'youtubei.js/dist/src/parser/ytmusic';
-import { Playlist } from 'youtubei.js/dist/src/parser/youtube';
 
 @Injectable()
 export class YoutubeService {
@@ -220,81 +218,6 @@ export class YoutubeService {
     return sanitizedFilename;
   }
 
-  // async createFolderPlaylist(
-  //   nameFolder: string,
-  //   songs: ItemVideoAuth[],
-  // ): Promise<IResponseFolder> {
-  //   try {
-  //     const uniqueUuid = randomUUID();
-  //     const folderName = `${this.sanitizeName(nameFolder)} - ${uniqueUuid}`;
-  //     const dirFolder = join(this.downloadDir, folderName);
-
-  //     if (!existsSync(dirFolder)) {
-  //       mkdirSync(dirFolder);
-  //     }
-
-  //     const divideSongs = [...Array(Math.ceil(songs.length / 10))].map((_, i) =>
-  //       songs.slice(i * 10, i * 10 + 10),
-  //     );
-
-  //     let counter = 1;
-  //     for (const partSong of divideSongs) {
-  //       try {
-  //         const listPromises: Promise<void>[] = [];
-  //         for (const song of partSong) {
-  //           const newMusic = new Promise<void>(async (resolve, reject) => {
-  //             try {
-  //               const stream = await this.innertube.download(String(song.id), {
-  //                 type: 'audio',
-  //                 quality: 'best',
-  //                 client: 'TV',
-  //               });
-
-  //               const filePath = `${dirFolder}/${counter} ${this.sanitizeName(song.name).replace(/\//g, '')}.mp3`;
-  //               counter++;
-  //               const file = createWriteStream(filePath);
-
-  //               // Escribe los datos en el archivo
-  //               for await (const chunk of Utils.streamToIterable(stream)) {
-  //                 file.write(chunk);
-  //               }
-  //               // Asegúrate de cerrar el archivo una vez que todo esté escrito
-  //               file.end(() => {
-  //                 resolve();
-  //               });
-  //             } catch (error) {
-  //               if (error instanceof Utils.InnertubeError) {
-  //                 console.log('//////////////Fallo descargando', song.name);
-  //               }
-  //               reject(error);
-  //             }
-  //           });
-  //           listPromises.push(newMusic);
-  //         }
-  //         await Promise.all(listPromises);
-  //       } catch (error) {
-  //         continue;
-  //       }
-  //     }
-
-  //     const filesData = await this.getFilesWithSize(dirFolder);
-  //     console.log('*****************filesData');
-  //     console.log(filesData);
-
-  //     return {
-  //       dirFile: dirFolder,
-  //       filename: folderName,
-  //     };
-  //   } catch (error) {
-  //     console.log('****************error descargando*******************');
-  //     console.log(error);
-
-  //     throw new NotFoundException(
-  //       'La lista de reproucción no se puede descargar, asegurate de copiar un link que contenga la lista de reproducción',
-  //     );
-  //   }
-  // }
-
   async proccessCreateRarPlaylist(
     url: string,
   ): Promise<ResponseServiceDownloadList> {
@@ -314,12 +237,26 @@ export class YoutubeService {
       cache: new UniversalCache(false),
     });
 
-    let folderAuth: PlaylistYTMusic;
-    let folderNotAuth: Playlist;
+    let folderAuth;
+    let folderNotAuth;
+
     try {
       folderAuth = await this.innertube.music.getPlaylist(playListId);
+    } catch (error) {
+      console.log('************error get playlist auth');
+      console.log(error);
+
+      throw new NotFoundException(
+        'La lista no existe o nose puede acceder, asegurate de que sea una lista publica',
+      );
+    }
+
+    try {
       folderNotAuth = await innerNotLogin.getPlaylist(playListId);
     } catch (error) {
+      console.log('************error get playlist not auth');
+      console.log(error);
+
       throw new NotFoundException(
         'La lista no existe o nose puede acceder, asegurate de que sea una lista publica',
       );

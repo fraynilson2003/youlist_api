@@ -312,8 +312,16 @@ export class YoutubeService {
       cache: new UniversalCache(false),
     });
 
-    const folderAuth = await this.innertube.music.getPlaylist(playListId);
-    const folderNotAuth = await innerNotLogin.getPlaylist(playListId);
+    let folderAuth;
+    let folderNotAuth;
+    try {
+      folderAuth = await this.innertube.music.getPlaylist(playListId);
+      folderNotAuth = await innerNotLogin.getPlaylist(playListId);
+    } catch (error) {
+      throw new NotFoundException(
+        'La lista no existe o nose puede acceder, asegurate de que sea una lista publica',
+      );
+    }
 
     const songs: ItemVideoAuth[] = folderAuth.items.map(
       (e: MusicResponsiveListItem) => {

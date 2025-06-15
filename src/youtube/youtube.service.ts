@@ -21,6 +21,8 @@ import { keyIdList } from './interfaces/keysParam';
 import { readdir, stat } from 'fs/promises';
 import * as AdmZip from 'adm-zip';
 import { InputFolder } from './interfaces/namefolder';
+import { Playlist as PlaylistMusic } from 'youtubei.js/dist/src/parser/ytmusic';
+import { Playlist } from 'youtubei.js/dist/src/parser/youtube';
 
 @Injectable()
 export class YoutubeService {
@@ -224,12 +226,13 @@ export class YoutubeService {
     const params = new URL(url);
     const playListId = params.searchParams.get(keyIdList);
 
-    console.log('*****************playListId');
-    console.log(playListId);
-
     if (!playListId) {
       throw new BadRequestException(
         'La url no contiene un id de lista de reproducción, copie una url cuando este reproduciendo el video dentro de una lista de reproducción',
+      );
+    } else if (playListId.startsWith('RD')) {
+      throw new BadRequestException(
+        'No se pueden procesar listas tipo "mix/radio" son listas creadas por youtube, usa una lista creada por usuarios.',
       );
     }
 
@@ -237,26 +240,13 @@ export class YoutubeService {
       cache: new UniversalCache(false),
     });
 
-    let folderAuth;
-    let folderNotAuth;
-
-    try {
-      folderAuth = await this.innertube.music.getPlaylist(playListId);
-    } catch (error) {
-      console.log('************error get playlist auth');
-      console.log(error);
-
-      throw new NotFoundException(
-        'La lista no existe o nose puede acceder, asegurate de que sea una lista publica',
-      );
-    }
+    let folderAuth: PlaylistMusic;
+    let folderNotAuth: Playlist;
 
     try {
       folderNotAuth = await innerNotLogin.getPlaylist(playListId);
+      folderAuth = await this.innertube.music.getPlaylist(playListId);
     } catch (error) {
-      console.log('************error get playlist not auth');
-      console.log(error);
-
       throw new NotFoundException(
         'La lista no existe o nose puede acceder, asegurate de que sea una lista publica',
       );

@@ -19,9 +19,6 @@ export class YoutubeController {
     if (type === 'url') {
       const { filename, filenameUnique, filepath } = value as IResponseFolder;
 
-      console.log('*******filepath');
-      console.log(filepath);
-
       res.setHeader(
         'Content-Disposition',
         `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,

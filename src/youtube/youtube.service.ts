@@ -296,8 +296,12 @@ export class YoutubeService {
   async proccessCreateRarPlaylist(
     url: string,
   ): Promise<ResponseServiceDownloadList> {
-    const params = new URLSearchParams(url);
-    const playListId = params.get(keyIdList);
+    const params = new URL(url);
+    const playListId = params.searchParams.get(keyIdList);
+
+    console.log('*****************playListId');
+    console.log(playListId);
+
     if (!playListId) {
       throw new BadRequestException(
         'La url no contiene un id de lista de reproducción, copie una url cuando este reproduciendo el video dentro de una lista de reproducción',
@@ -329,13 +333,6 @@ export class YoutubeService {
       filename: folder.filename,
       filenameUnique: folder.filenameUnique,
       filepath: folder.filepath,
-    });
-
-    const stats = await stat(responseZip.filepath);
-    console.log('***********************rar');
-    console.log({
-      name: responseZip.filenameUnique,
-      sizeInBytes: stats.size,
     });
 
     return {
@@ -370,9 +367,6 @@ export class YoutubeService {
           i * limitMaxDownload + limitMaxDownload,
         ),
       );
-
-      console.log('**********************divideSongs');
-      console.log(divideSongs);
 
       let counter = 1;
       for (const partSong of divideSongs) {
@@ -417,10 +411,6 @@ export class YoutubeService {
           continue;
         }
       }
-
-      const filesData = await this.getFilesWithSize(dirFolder);
-      console.log('*****************filesData');
-      console.log(filesData);
 
       return {
         filepath: dirFolder,

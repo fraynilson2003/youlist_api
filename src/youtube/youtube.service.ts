@@ -21,6 +21,8 @@ import { keyIdList } from './interfaces/keysParam';
 import { readdir, stat } from 'fs/promises';
 import * as AdmZip from 'adm-zip';
 import { InputFolder } from './interfaces/namefolder';
+import { Playlist as PlaylistYTMusic } from 'youtubei.js/dist/src/parser/ytmusic';
+import { Playlist } from 'youtubei.js/dist/src/parser/youtube';
 
 @Injectable()
 export class YoutubeService {
@@ -312,8 +314,8 @@ export class YoutubeService {
       cache: new UniversalCache(false),
     });
 
-    let folderAuth;
-    let folderNotAuth;
+    let folderAuth: PlaylistYTMusic;
+    let folderNotAuth: Playlist;
     try {
       folderAuth = await this.innertube.music.getPlaylist(playListId);
       folderNotAuth = await innerNotLogin.getPlaylist(playListId);

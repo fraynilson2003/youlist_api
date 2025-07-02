@@ -17,7 +17,7 @@ import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { ItemVideoAuth } from './interfaces/itemVideoAuth';
 import { MusicResponsiveListItem } from 'youtubei.js/dist/src/parser/nodes';
-import { keyIdList } from './interfaces/keysParam';
+import { keyIdList, keyIdMusic } from './interfaces/keysParam';
 import { readdir, stat } from 'fs/promises';
 import * as AdmZip from 'adm-zip';
 import { InputFolder } from './interfaces/namefolder';
@@ -30,6 +30,7 @@ export class YoutubeService {
   private readonly rarDir = join(__dirname, '../../', 'downloads/rar');
   private cache = new UniversalCache(true);
   private innertube: Innertube | undefined;
+  private innertubeNotLogin: Promise<Innertube> | undefined;
   private oAuth2Client: OAuth2Client | undefined;
   private authorizationUrl: string | undefined;
   private clientId: string;
@@ -44,19 +45,42 @@ export class YoutubeService {
     );
     this.redirectUri = this.configService.get<string>('BASE_HOST') + '/login';
     this.clientHost = this.configService.get<string>('CLIENT_HOST');
+
+    this.innertubeNotLogin = Innertube.create({
+      cache: new UniversalCache(false),
+    });
+  }
+  async getInnertubeNotLogin(): Promise<Innertube> {
+    if (!this.innertubeNotLogin) {
+      return (this.innertubeNotLogin = Innertube.create({
+        cache: new UniversalCache(false),
+      }));
+    } else {
+      return this.innertubeNotLogin;
+    }
   }
 
-  async downloadPlaylist(
-    listUrl?: string,
-  ): Promise<ResponseServiceDownloadList> {
-    if (!listUrl) {
-      throw new BadRequestException(
-        'No se ha proporcionado una URL de lista de reproducción.',
-      );
+  async downloadPlaylist(url?: string): Promise<ResponseServiceDownloadList> {
+    if (!url) {
+      throw new BadRequestException('No se ha proporcionado una URL');
     }
-    const result = await this.prepareSession();
-    if (result) {
-      return await this.proccessCreateRarPlaylist(listUrl);
+    const isLogin = await this.prepareSession();
+    if (isLogin) {
+      const params = new URL(url);
+      const playListId = params.searchParams.get(keyIdList);
+      const musicId = params.searchParams.get(keyIdMusic);
+
+      if (musicId && playListId.startsWith('RD')) {
+        return await this.processCreateOnlyMusic(musicId);
+      } else if (playListId) {
+        return await this.proccessCreateRarPlaylist(playListId);
+      } else if (musicId) {
+        return await this.processCreateOnlyMusic(musicId);
+      } else {
+        throw new BadRequestException(
+          'La url no contiene un id de lista de reproducción o un video',
+        );
+      }
     } else {
       if (!this.oAuth2Client) {
         this.oAuth2Client = new OAuth2Client(
@@ -87,7 +111,7 @@ export class YoutubeService {
     //si hay cliente
   }
 
-  async prepareSession(): Promise<boolean | string> {
+  async prepareSession(): Promise<boolean> {
     if (!this.innertube) {
       this.innertube = await Innertube.create({
         cache: this.cache,
@@ -220,25 +244,61 @@ export class YoutubeService {
     return sanitizedFilename;
   }
 
-  async proccessCreateRarPlaylist(
-    url: string,
+  async processCreateOnlyMusic(
+    musicId: string,
   ): Promise<ResponseServiceDownloadList> {
-    const params = new URL(url);
-    const playListId = params.searchParams.get(keyIdList);
+    const music = await new Promise<ResponseServiceDownloadList>(
+      async (resolve, reject) => {
+        try {
+          const infoMusic = await this.innertube.music.getInfo(musicId);
 
-    if (!playListId) {
-      throw new BadRequestException(
-        'La url no contiene un id de lista de reproducción, copie una url cuando este reproduciendo el video dentro de una lista de reproducción',
-      );
-    } else if (playListId.startsWith('RD')) {
+          const uniqueUuid = randomUUID();
+          const title = this.sanitizeName(infoMusic.basic_info.title);
+          const filenameUnique = `${title} --- ${uniqueUuid}.mp3`;
+          const dirFile = join(this.downloadDir, filenameUnique);
+
+          const stream = await this.innertube.download(String(musicId), {
+            type: 'audio',
+            quality: 'best',
+            client: 'TV',
+          });
+
+          const file = createWriteStream(dirFile);
+
+          // Escribe los datos en el archivo
+          for await (const chunk of Utils.streamToIterable(stream)) {
+            file.write(chunk);
+          }
+          // Asegúrate de cerrar el archivo una vez que todo esté escrito
+          file.end(() => {
+            resolve({
+              type: 'filenames',
+              value: {
+                filenameUnique,
+                filename: `${title}.mp3`,
+                filepath: dirFile,
+              },
+            });
+          });
+        } catch (error) {
+          reject(new NotFoundException('La url no se puede descargar'));
+        }
+      },
+    );
+
+    return music;
+  }
+
+  async proccessCreateRarPlaylist(
+    playListId: string,
+  ): Promise<ResponseServiceDownloadList> {
+    if (playListId.startsWith('RD')) {
       throw new BadRequestException(
         'No se pueden procesar listas tipo "mix/radio" son listas creadas por youtube, usa una lista creada por usuarios.',
       );
     }
 
-    const innerNotLogin = await Innertube.create({
-      cache: new UniversalCache(false),
-    });
+    const innerNotLogin = await this.getInnertubeNotLogin();
 
     let folderAuth: PlaylistMusic;
     let folderNotAuth: Playlist;
@@ -273,7 +333,7 @@ export class YoutubeService {
     });
 
     return {
-      type: 'url',
+      type: 'filenames',
       value: responseZip,
     };
   }
@@ -335,9 +395,6 @@ export class YoutubeService {
                   resolve();
                 });
               } catch (error) {
-                if (error instanceof Utils.InnertubeError) {
-                  console.log('//////////////Fallo descargando', song.name);
-                }
                 reject(error);
               }
             });

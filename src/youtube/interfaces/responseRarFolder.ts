@@ -5,6 +5,6 @@ export interface IResponseFolder {
 }
 
 export interface ResponseServiceDownloadList {
-  type: 'url' | 'redirect';
-  value: any;
+  type: 'filenames' | 'redirect';
+  value: IResponseFolder | string;
 }

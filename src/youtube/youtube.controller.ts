@@ -16,7 +16,7 @@ export class YoutubeController {
     @Query(keyUrlList) listUrl?: string,
   ) {
     const { type, value } = await this.yotubeService.downloadPlaylist(listUrl);
-    if (type === 'url') {
+    if (type === 'filenames') {
       const { filename, filenameUnique, filepath } = value as IResponseFolder;
 
       res.setHeader(
